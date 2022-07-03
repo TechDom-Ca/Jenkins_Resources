@@ -1,0 +1,55 @@
+pipeline {
+    agent any
+    stages {
+        stage ('CloneFromGithub') {
+            steps {
+                sh 'echo Cloning effected from GitHub'
+                checkout([$class: 'GitSCM', branches: [[name: '**']], extensions: [], userRemoteConfigs: [[credentialsId: 'GitHub', url: 'https://github.com/TechDom-Ca/webapplication']]])
+            }
+        }
+        stage ('Build') {
+            steps {
+                sh 'echo Build to be completed with maven'
+                sh 'mvn clean'
+                sh 'mvn install'
+            }
+        }
+        stage ('CodeQualityAnalysis') {
+            steps {
+                sh 'echo Code Quality report to be generated using Sonarqube'
+                sh 'mvn clean'
+                sh 'mvn sonar:sonar'
+            }
+        }
+        stage ('BackupArtifacts') {
+            steps {
+                sh 'echo Artifacts to be backed up in Nexus'
+                sh 'mvn clean'
+                sh 'mvn deploy'
+            }
+        }
+        stage ('Authorisation') {
+            steps {
+                timeout(time: 24, unit: 'HOURS') {
+                    // some block
+                    input message: 'Approve or Decline'
+                    }
+            }
+        }
+        stage ('DeploytoAppServer') {
+            steps {
+                deploy adapters: [tomcat9(credentialsId: 'TomcatDeployer', path: '', url: 'http://44.204.33.54:5000/')], contextPath: 'mydp', war: 'target/*.war'
+            }
+        }
+    }
+    post {
+        success {
+            emailext body: 'Cheers guys! What an amazing job...', subject: 'Hurray! Deployment is Successful', to: 'developers@techdom.ca'
+        }
+        failure {
+            emailext body: '''Unfortunately guys, you need to clock in some more time to make this a success as you always do.
+
+Thank you''', replyTo: 'alerts@techdom.ca', subject: 'Urgent Attention Required: Deployment Failed!!!', to: 'developers@techdom.ca'
+        }
+    }
+}
