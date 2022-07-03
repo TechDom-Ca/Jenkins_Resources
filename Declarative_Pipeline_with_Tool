@@ -1,0 +1,53 @@
+pipeline {
+    agent any
+    tools {
+        maven 'maven3.8.6'
+    }
+    stages {
+        stage ('ClonefromGithub') {
+            steps {
+                checkout([$class: 'GitSCM', branches: [[name: '**']], extensions: [], userRemoteConfigs: [[credentialsId: 'GitHub', url: 'https://github.com/TechDom-Ca/webapplication']]])
+                sh 'echo Private repository was used. Hence, the need for authentication.'
+            }
+        }
+        stage ('Build') {
+            steps {
+                sh 'mvn clean'
+                sh 'mvn install'
+            }
+        }
+        stage ('CodeQualityAnalysis') {
+            steps {
+                sh 'mvn clean'
+                sh 'mvn sonar:sonar'
+            }
+        }
+        stage ('BackupArtifacts') {
+            steps {
+               sh 'mvn clean'
+               sh 'mvn deploy'
+            }
+        }
+        stage ('Authorisation') {
+            steps {
+                timeout(time: 48, unit: 'HOURS') {
+                    // some block
+                    input message: 'Approve or Decline'
+                    }
+            }
+        }
+        stage ('DeploytoAppServer') {
+            steps {
+                deploy adapters: [tomcat9(credentialsId: 'TomcatDeployer', path: '', url: 'http://172.31.81.12:5000/')], contextPath: 'deepee', war: 'target/*.war'
+            }
+        }
+    }
+    post {
+        success {
+            emailext body: 'Cheers guys! What an amazing job you\'ve done.', subject: 'Hurray! This Deployment is Successful...', to: 'developers@techdom.ca'
+        }
+        failure {
+            emailext body: 'Unfortunately, guys; you will need to clock in more time to make this a success as you always do.', replyTo: 'alerts@techdom.ca', subject: 'Urgent! Failed Deployment', to: 'developers@techdom.ca'
+        }
+    }
+}
